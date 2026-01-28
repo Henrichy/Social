@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: accvaultng-backend
+    env: node
+    plan: starter
+    region: oregon
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+    autoDeploy: false
+    disk:
+      name: accvaultng-disk
+      mountPath: /opt/render/project/src
+      sizeGB: 1

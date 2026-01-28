@@ -15,6 +15,7 @@ const isProduction = process.env.NODE_ENV === 'production';
 
 const allowedOrigins = [
   'https://accvaultng.com',
+  'http://accvaultng.com',
   'https://www.accvaultng.com',
   'https://accvaultng.vercel.app',
   'http://localhost:3000',

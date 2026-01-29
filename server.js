@@ -103,6 +103,7 @@ app.use('/api/accounts', require('./routes/accounts'));
 app.use('/api/admin', require('./routes/admin'));
 app.use('/api/payments', require('./routes/payments'));
 app.use('/api/crypto-settings', require('./routes/cryptoSettings'));
+app.use('/api/whatsapp-payment', require('./routes/whatsappPayment'));
 app.use('/api/user', require('./routes/userStats'));
 
 /* =========================

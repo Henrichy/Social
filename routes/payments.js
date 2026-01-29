@@ -65,10 +65,12 @@ router.post('/create-order', auth, async (req, res) => {
 
       console.log('Found account:', account.title);
       console.log('Available credentials:', account.availableCredentialsCount);
-      console.log('Credentials inventory:', account.credentialsInventory.length);
+      console.log('Credentials inventory:', account.credentialsInventory?.length || 0);
 
       // Check if we have enough available credentials
-      const availableCredentials = account.credentialsInventory.filter(cred => !cred.isSold);
+      const availableCredentials = account.credentialsInventory && Array.isArray(account.credentialsInventory)
+        ? account.credentialsInventory.filter(cred => !cred.isSold)
+        : [];
       console.log('Available credentials count:', availableCredentials.length);
       
       if (availableCredentials.length < cartItem.quantity) {

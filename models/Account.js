@@ -141,11 +141,17 @@ const AccountSchema = new mongoose.Schema({
 
 // Virtual field to get available credentials count
 AccountSchema.virtual('availableCredentialsCount').get(function() {
+  if (!this.credentialsInventory || !Array.isArray(this.credentialsInventory)) {
+    return 0;
+  }
   return this.credentialsInventory.filter(cred => !cred.isSold).length;
 });
 
 // Virtual field to get total credentials count
 AccountSchema.virtual('totalCredentialsCount').get(function() {
+  if (!this.credentialsInventory || !Array.isArray(this.credentialsInventory)) {
+    return 0;
+  }
   return this.credentialsInventory.length;
 });
 

@@ -72,8 +72,29 @@ router.get('/accounts', [auth, adminAuth], async (req, res) => {
       .populate('category', 'name')
       .populate('seller', 'name email')
       .sort({ createdAt: -1 });
-    res.json(accounts);
+    
+    // Ensure credentials are properly formatted for admin interface
+    const formattedAccounts = accounts.map(account => {
+      const accountObj = account.toObject();
+      
+      // Ensure credentials is always an array
+      if (!Array.isArray(accountObj.credentials)) {
+        if (typeof accountObj.credentials === 'string' && accountObj.credentials.trim()) {
+          accountObj.credentials = [accountObj.credentials.trim()];
+        } else {
+          accountObj.credentials = [];
+        }
+      } else {
+        // Filter out empty credentials
+        accountObj.credentials = accountObj.credentials.filter(cred => cred && cred.trim());
+      }
+      
+      return accountObj;
+    });
+    
+    res.json(formattedAccounts);
   } catch (error) {
+    console.error('Admin accounts fetch error:', error);
     res.status(500).json({ message: 'Server error' });
   }
 });

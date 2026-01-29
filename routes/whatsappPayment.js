@@ -258,23 +258,50 @@ router.post('/verify-code', auth, adminAuth, async (req, res) => {
         });
       }
 
-      // Check available credentials
-      const availableCredentials = account.credentialsInventory && Array.isArray(account.credentialsInventory) 
-        ? account.credentialsInventory.filter(cred => !cred.isSold)
-        : [];
-      if (availableCredentials.length < cartItem.quantity) {
+      // Check available credentials using new format
+      let availableCredentialsCount = 0;
+      
+      if (Array.isArray(account.credentials)) {
+        // New credentials array format
+        const validCredentials = account.credentials.filter(cred => cred && cred.trim());
+        availableCredentialsCount = account.isSold ? 0 : validCredentials.length;
+      } else if (account.credentialsInventory && Array.isArray(account.credentialsInventory)) {
+        // Fallback to legacy inventory system
+        availableCredentialsCount = account.credentialsInventory.filter(cred => !cred.isSold).length;
+      }
+      
+      console.log(`Account: ${account.title}`);
+      console.log(`Credentials array:`, account.credentials);
+      console.log(`Available credentials count: ${availableCredentialsCount}`);
+      console.log(`Requested quantity: ${cartItem.quantity}`);
+      console.log(`Account is sold: ${account.isSold}`);
+      
+      if (availableCredentialsCount < cartItem.quantity) {
         return res.status(400).json({
           success: false,
-          message: `Not enough credentials available for ${account.title}. Available: ${availableCredentials.length}, Requested: ${cartItem.quantity}`
+          message: `Not enough credentials available for ${account.title}. Available: ${availableCredentialsCount}, Requested: ${cartItem.quantity}`
         });
       }
 
-      // Mark credentials as sold
-      const credentialsToSell = availableCredentials.slice(0, cartItem.quantity);
-      for (const credential of credentialsToSell) {
-        credential.isSold = true;
-        credential.soldAt = new Date();
-        credential.soldTo = paymentCode.buyer._id;
+      // Get only the requested quantity of credentials
+      let assignedCredentials = [];
+      
+      if (Array.isArray(account.credentials) && account.credentials.length > 0) {
+        const validCredentials = account.credentials.filter(cred => cred && cred.trim());
+        assignedCredentials = validCredentials.slice(0, cartItem.quantity);
+        
+        // Remove assigned credentials from account and keep the rest
+        const remainingCredentials = validCredentials.slice(cartItem.quantity);
+        account.credentials = remainingCredentials;
+        
+        console.log(`Assigned ${assignedCredentials.length} credentials to order`);
+        console.log(`Remaining ${remainingCredentials.length} credentials in account`);
+      } else if (account.credentials && typeof account.credentials === 'string') {
+        // Handle single string credential (legacy)
+        assignedCredentials = cartItem.quantity > 0 ? [account.credentials] : [];
+        account.credentials = []; // Clear since it's been assigned
+      } else {
+        assignedCredentials = Array(cartItem.quantity).fill('No credentials available');
       }
 
       // Add to order items
@@ -282,16 +309,14 @@ router.post('/verify-code', auth, adminAuth, async (req, res) => {
         account: account._id,
         quantity: cartItem.quantity,
         price: cartItem.price,
-        credentials: credentialsToSell.map(cred => ({
-          email: cred.email,
-          password: cred.password,
-          username: cred.username,
-          phone: cred.phone,
-          recoveryEmail: cred.recoveryEmail,
-          additionalInfo: cred.additionalInfo
-        }))
+        credentials: assignedCredentials
       });
 
+      // Mark account as sold only if no credentials remain
+      if (Array.isArray(account.credentials) && account.credentials.length === 0) {
+        account.isSold = true;
+      }
+      
       await account.save();
     }
 
@@ -426,6 +451,36 @@ router.post('/migrate-accounts', auth, adminAuth, async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Server error during migration',
+      error: error.message
+    });
+  }
+});
+
+// Test endpoint to check account credentials format (admin only)
+router.get('/test-credentials/:id', auth, adminAuth, async (req, res) => {
+  try {
+    const account = await Account.findById(req.params.id);
+    if (!account) {
+      return res.status(404).json({ message: 'Account not found' });
+    }
+    
+    res.json({
+      accountId: account._id,
+      title: account.title,
+      credentials: account.credentials,
+      credentialsType: typeof account.credentials,
+      credentialsIsArray: Array.isArray(account.credentials),
+      credentialsLength: Array.isArray(account.credentials) ? account.credentials.length : 'N/A',
+      availableCredentialsCount: account.availableCredentialsCount,
+      totalCredentialsCount: account.totalCredentialsCount,
+      isSold: account.isSold,
+      isAvailable: account.isAvailable
+    });
+  } catch (error) {
+    console.error('Error testing credentials:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error',
       error: error.message
     });
   }

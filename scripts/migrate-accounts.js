@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * Manual script to migrate account credentials
+ * Manual script to migrate account credentials to simplified format
  * Run with: node scripts/migrate-accounts.js
  */
 

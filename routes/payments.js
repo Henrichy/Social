@@ -67,27 +67,50 @@ router.post('/create-order', auth, async (req, res) => {
       console.log('Available credentials:', account.availableCredentialsCount);
       console.log('Credentials inventory:', account.credentialsInventory?.length || 0);
 
-      // Check if we have enough available credentials
-      const availableCredentials = account.credentialsInventory && Array.isArray(account.credentialsInventory)
-        ? account.credentialsInventory.filter(cred => !cred.isSold)
-        : [];
-      console.log('Available credentials count:', availableCredentials.length);
+      // Check if we have enough available credentials using new format
+      let availableCredentialsCount = 0;
       
-      if (availableCredentials.length < cartItem.quantity) {
+      if (Array.isArray(account.credentials)) {
+        // New credentials array format
+        const validCredentials = account.credentials.filter(cred => cred && cred.trim());
+        availableCredentialsCount = account.isSold ? 0 : validCredentials.length;
+        console.log('Using new credentials array format');
+        console.log('Valid credentials:', validCredentials.length);
+      } else if (account.credentialsInventory && Array.isArray(account.credentialsInventory)) {
+        // Fallback to legacy inventory system
+        availableCredentialsCount = account.credentialsInventory.filter(cred => !cred.isSold).length;
+        console.log('Using legacy credentials inventory format');
+      }
+      
+      console.log('Available credentials count:', availableCredentialsCount);
+      console.log('Account is sold:', account.isSold);
+      
+      if (availableCredentialsCount < cartItem.quantity) {
         console.log('Not enough credentials available');
         return res.status(400).json({ 
-          error: `Not enough credentials available for ${account.title}. Available: ${availableCredentials.length}, Requested: ${cartItem.quantity}` 
+          error: `Not enough credentials available for ${account.title}. Available: ${availableCredentialsCount}, Requested: ${cartItem.quantity}` 
         });
       }
 
-      // Mark credentials as sold and assign to buyer
-      const credentialsToSell = availableCredentials.slice(0, cartItem.quantity);
-      console.log('Credentials to sell:', credentialsToSell.length);
+      // Get only the requested quantity of credentials
+      let assignedCredentials = [];
       
-      for (const credential of credentialsToSell) {
-        credential.isSold = true;
-        credential.soldAt = new Date();
-        credential.soldTo = req.userId;
+      if (Array.isArray(account.credentials) && account.credentials.length > 0) {
+        const validCredentials = account.credentials.filter(cred => cred && cred.trim());
+        assignedCredentials = validCredentials.slice(0, cartItem.quantity);
+        
+        // Remove assigned credentials from account and keep the rest
+        const remainingCredentials = validCredentials.slice(cartItem.quantity);
+        account.credentials = remainingCredentials;
+        
+        console.log(`Assigned ${assignedCredentials.length} credentials to order`);
+        console.log(`Remaining ${remainingCredentials.length} credentials in account`);
+      } else if (account.credentials && typeof account.credentials === 'string') {
+        // Handle single string credential (legacy)
+        assignedCredentials = cartItem.quantity > 0 ? [account.credentials] : [];
+        account.credentials = []; // Clear since it's been assigned
+      } else {
+        assignedCredentials = Array(cartItem.quantity).fill('No credentials available');
       }
 
       // Add item with credentials to order
@@ -95,14 +118,7 @@ router.post('/create-order', auth, async (req, res) => {
         account: account._id,
         quantity: cartItem.quantity,
         price: account.price,
-        credentials: credentialsToSell.map(cred => ({
-          email: cred.email,
-          password: cred.password,
-          username: cred.username,
-          phone: cred.phone,
-          recoveryEmail: cred.recoveryEmail,
-          additionalInfo: cred.additionalInfo
-        }))
+        credentials: assignedCredentials
       };
       
       console.log('Order item created:', {
@@ -114,9 +130,15 @@ router.post('/create-order', auth, async (req, res) => {
       
       orderItems.push(orderItem);
 
-      // Save the account with updated credentials
+      // Mark account as sold only if no credentials remain
+      if (Array.isArray(account.credentials) && account.credentials.length === 0) {
+        account.isSold = true;
+        console.log('Account marked as sold - no credentials remaining');
+      } else {
+        console.log(`Account still has ${account.credentials.length} credentials remaining`);
+      }
+      
       await account.save();
-      console.log('Account saved with updated credentials');
     }
 
     console.log('Order items prepared:', orderItems.length);

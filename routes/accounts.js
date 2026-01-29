@@ -20,22 +20,51 @@ router.get('/', async (req, res) => {
     }
 
     const accounts = await Account.find(query)
-      .select('-credentials') // Exclude credentials from public API
       .populate('category', 'name')
       .populate('seller', 'name')
       .sort({ createdAt: -1 })
       .limit(limit * 1)
       .skip((page - 1) * limit);
 
+    // Process accounts to exclude credentials but include availability counts
+    const processedAccounts = accounts.map(account => {
+      const accountObj = account.toObject();
+      
+      // Calculate availability counts manually
+      let availableCredentialsCount = 0;
+      let totalCredentialsCount = 0;
+      
+      if (Array.isArray(accountObj.credentials)) {
+        const validCredentials = accountObj.credentials.filter(cred => cred && cred.trim());
+        totalCredentialsCount = validCredentials.length;
+        availableCredentialsCount = accountObj.isSold ? 0 : validCredentials.length;
+      } else if (accountObj.credentialsInventory && Array.isArray(accountObj.credentialsInventory)) {
+        // Fallback to legacy inventory system
+        totalCredentialsCount = accountObj.credentialsInventory.length;
+        availableCredentialsCount = accountObj.credentialsInventory.filter(cred => !cred.isSold).length;
+      }
+      
+      // Remove credentials from response but keep availability counts
+      delete accountObj.credentials;
+      delete accountObj.credentialsInventory;
+      
+      // Add calculated counts
+      accountObj.availableCredentialsCount = availableCredentialsCount;
+      accountObj.totalCredentialsCount = totalCredentialsCount;
+      
+      return accountObj;
+    });
+
     const total = await Account.countDocuments(query);
 
     res.json({
-      accounts,
+      accounts: processedAccounts,
       totalPages: Math.ceil(total / limit),
       currentPage: page,
       total
     });
   } catch (error) {
+    console.error('Get accounts error:', error);
     res.status(500).json({ message: 'Server error' });
   }
 });
@@ -44,7 +73,6 @@ router.get('/', async (req, res) => {
 router.get('/:id', async (req, res) => {
   try {
     const account = await Account.findById(req.params.id)
-      .select('-credentials') // Exclude credentials from public API
       .populate('category', 'name')
       .populate('seller', 'name email');
     
@@ -52,8 +80,33 @@ router.get('/:id', async (req, res) => {
       return res.status(404).json({ message: 'Account not found' });
     }
     
-    res.json(account);
+    const accountObj = account.toObject();
+    
+    // Calculate availability counts manually
+    let availableCredentialsCount = 0;
+    let totalCredentialsCount = 0;
+    
+    if (Array.isArray(accountObj.credentials)) {
+      const validCredentials = accountObj.credentials.filter(cred => cred && cred.trim());
+      totalCredentialsCount = validCredentials.length;
+      availableCredentialsCount = accountObj.isSold ? 0 : validCredentials.length;
+    } else if (accountObj.credentialsInventory && Array.isArray(accountObj.credentialsInventory)) {
+      // Fallback to legacy inventory system
+      totalCredentialsCount = accountObj.credentialsInventory.length;
+      availableCredentialsCount = accountObj.credentialsInventory.filter(cred => !cred.isSold).length;
+    }
+    
+    // Remove credentials from response but keep availability counts
+    delete accountObj.credentials;
+    delete accountObj.credentialsInventory;
+    
+    // Add calculated counts
+    accountObj.availableCredentialsCount = availableCredentialsCount;
+    accountObj.totalCredentialsCount = totalCredentialsCount;
+    
+    res.json(accountObj);
   } catch (error) {
+    console.error('Get single account error:', error);
     res.status(500).json({ message: 'Server error' });
   }
 });
@@ -76,6 +129,7 @@ router.post('/', auth, async (req, res) => {
       features,
       bulkDiscount,
       guarantee,
+      credentials,
       credentialsInventory
     } = req.body;
 
@@ -94,6 +148,7 @@ router.post('/', auth, async (req, res) => {
       features,
       bulkDiscount,
       guarantee,
+      credentials: credentials, // Let pre-save hook handle formatting
       credentialsInventory: credentialsInventory || [],
       seller: req.userId
     });
@@ -127,8 +182,15 @@ router.put('/:id', auth, async (req, res) => {
       bulkDiscount,
       guarantee,
       isAvailable,
+      credentials,
       credentialsInventory
     } = req.body;
+
+    console.log('Update account request received');
+    console.log('Account ID:', req.params.id);
+    console.log('Credentials received:', credentials);
+    console.log('Credentials type:', typeof credentials);
+    console.log('Credentials is array:', Array.isArray(credentials));
 
     const account = await Account.findById(req.params.id);
     if (!account) {
@@ -152,7 +214,32 @@ router.put('/:id', auth, async (req, res) => {
     account.guarantee = guarantee !== undefined ? guarantee : account.guarantee;
     account.isAvailable = isAvailable !== undefined ? isAvailable : account.isAvailable;
     
-    // Update credentials inventory if provided
+    // Update credentials array if provided
+    if (credentials !== undefined) {
+      console.log('Raw credentials received:', JSON.stringify(credentials, null, 2));
+      console.log('Credentials type:', typeof credentials);
+      console.log('Account was sold:', account.isSold);
+      
+      // Let the pre-save hook handle the formatting
+      account.credentials = credentials;
+      console.log('Credentials set to:', account.credentials);
+      
+      // Check if new credentials were added and account was previously sold
+      const hasValidCredentials = Array.isArray(credentials) 
+        ? credentials.some(cred => cred && cred.trim())
+        : (credentials && credentials.trim());
+      
+      if (hasValidCredentials && account.isSold) {
+        console.log('Account had new credentials added - marking as available');
+        account.isSold = false;
+        account.isAvailable = true;
+      }
+      
+      console.log('Account isSold status:', account.isSold);
+      console.log('Account isAvailable status:', account.isAvailable);
+    }
+    
+    // Update credentials inventory if provided (for backward compatibility)
     if (credentialsInventory !== undefined) {
       account.credentialsInventory = credentialsInventory;
     }

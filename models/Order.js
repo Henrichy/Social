@@ -26,14 +26,10 @@ const OrderSchema = new mongoose.Schema({
       type: Number,
       required: true
     },
-    credentials: [{
-      email: String,
-      password: String,
-      username: String,
-      phone: String,
-      recoveryEmail: String,
-      additionalInfo: String
-    }]
+    credentials: {
+      type: mongoose.Schema.Types.Mixed, // Can be string or array of strings
+      default: []
+    }
   }],
   totalAmount: {
     type: Number,

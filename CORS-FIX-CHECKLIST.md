@@ -27,7 +27,7 @@ After adding the environment variable, redeploy your backend service on Render.
 ### 3. Test CORS
 After redeployment, test the CORS configuration by visiting:
 ```
-https://social-acc-b51t.onrender.com/api/cors-test
+http://localhost:5000/api/cors-test
 ```
 
 This should return a JSON response without CORS errors.

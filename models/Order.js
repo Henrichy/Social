@@ -37,7 +37,7 @@ const OrderSchema = new mongoose.Schema({
   },
   paymentMethod: {
     type: String,
-    enum: ['paystack', 'crypto-bitcoin', 'crypto-usdt', 'whatsapp-bank'],
+    enum: ['paystack', 'crypto-bitcoin', 'crypto-usdt', 'whatsapp-bank', 'wallet'],
     required: true
   },
   paymentReference: {

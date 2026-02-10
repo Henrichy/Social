@@ -105,6 +105,7 @@ app.use('/api/payments', require('./routes/payments'));
 app.use('/api/crypto-settings', require('./routes/cryptoSettings'));
 app.use('/api/whatsapp-payment', require('./routes/whatsappPayment'));
 app.use('/api/user', require('./routes/userStats'));
+app.use('/api/wallet', require('./routes/wallet'));
 
 /* =========================
    ✅ STATIC FRONTEND (OPTIONAL)

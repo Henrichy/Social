@@ -143,6 +143,44 @@ router.post('/create-order', auth, async (req, res) => {
 
     console.log('Order items prepared:', orderItems.length);
 
+    // Handle wallet payment if payment method is wallet
+    if (paymentMethod === 'wallet') {
+      console.log('Processing wallet payment...');
+      const User = require('../models/User');
+      const user = await User.findById(req.userId);
+      
+      if (!user) {
+        return res.status(404).json({ 
+          success: false,
+          error: 'User not found' 
+        });
+      }
+
+      // Initialize wallet balance if it doesn't exist
+      if (typeof user.walletBalance !== 'number') {
+        user.walletBalance = 0;
+      }
+
+      console.log('User wallet balance:', user.walletBalance);
+      console.log('Order total amount:', totalAmount);
+
+      // Check if user has sufficient balance
+      if (user.walletBalance < totalAmount) {
+        return res.status(400).json({ 
+          success: false,
+          error: 'Insufficient wallet balance',
+          walletBalance: user.walletBalance,
+          requiredAmount: totalAmount
+        });
+      }
+
+      // Deduct amount from wallet
+      user.walletBalance -= totalAmount;
+      await user.save();
+      
+      console.log('Wallet payment successful. New balance:', user.walletBalance);
+    }
+
     // Create order
     const order = new Order({
       orderNumber,

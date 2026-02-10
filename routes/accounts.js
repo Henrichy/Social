@@ -7,17 +7,12 @@ const router = express.Router();
 // Get all accounts
 router.get('/', async (req, res) => {
   try {
-    const { category, platform, minPrice, maxPrice, page = 1, limit = 12 } = req.query;
+    const { category, platform, page = 1, limit = 12 } = req.query;
     
     let query = { isAvailable: true };
     
     if (category) query.category = category;
     if (platform) query.platform = { $regex: platform, $options: 'i' };
-    if (minPrice || maxPrice) {
-      query.price = {};
-      if (minPrice) query.price.$gte = Number(minPrice);
-      if (maxPrice) query.price.$lte = Number(maxPrice);
-    }
 
     const accounts = await Account.find(query)
       .populate('category', 'name')

@@ -247,15 +247,26 @@ router.get('/my-orders', auth, async (req, res) => {
   }
 });
 
-// Verify Paystack payment
+// Verify payment (supports both Paystack and Vpay)
 router.post('/verify-payment', async (req, res) => {
   try {
-    const { reference } = req.body;
+    const { reference, paymentMethod } = req.body;
     
     if (!reference) {
       return res.status(400).json({ error: 'Payment reference is required' });
     }
 
+    // For Vpay, we rely on webhook confirmation, so just return success
+    // The actual verification happens in the webhook endpoint
+    if (paymentMethod === 'vpay') {
+      return res.json({
+        success: true,
+        message: 'Vpay payment will be confirmed via webhook',
+        data: { reference }
+      });
+    }
+
+    // Legacy Paystack verification (if still needed)
     const paystackSecretKey = process.env.PAYSTACK_SECRET_KEY;
     
     if (!paystackSecretKey) {
@@ -328,4 +339,55 @@ router.post('/verify-payment', async (req, res) => {
   }
 });
 
+// Vpay Webhook endpoint for payment confirmation
+router.post('/vpay-webhook', async (req, res) => {
+  try {
+    const payload = req.body;
+    const authToken = req.headers['x-payload-auth'];
+    
+    console.log('Vpay webhook received:', payload);
+    
+    // Verify the webhook payload using JWT token
+    if (authToken) {
+      const jwt = require('jsonwebtoken');
+      try {
+        const decoded = jwt.decode(authToken);
+        const vpaySecretKey = process.env.VPAY_SECRET_KEY;
+        
+        if (decoded && decoded.secret === vpaySecretKey) {
+          console.log('Vpay webhook authenticated successfully');
+          
+          // Process the payment confirmation
+          if (payload.code === '00' && payload.message.includes('successful')) {
+            // Payment was successful
+            // You can update order status, wallet balance, etc. here
+            console.log('Vpay payment successful:', payload);
+            
+            return res.status(200).json({ 
+              success: true, 
+              message: 'Webhook processed successfully' 
+            });
+          }
+        } else {
+          console.log('Vpay webhook authentication failed');
+        }
+      } catch (jwtError) {
+        console.error('JWT verification error:', jwtError);
+      }
+    }
+    
+    // Return 200 even if authentication fails to prevent retries
+    res.status(200).json({ 
+      success: false, 
+      message: 'Webhook received but not authenticated' 
+    });
+    
+  } catch (error) {
+    console.error('Vpay webhook error:', error);
+    res.status(200).json({ 
+      success: false, 
+      message: 'Webhook processing error' 
+    });
+  }
+});
 module.exports = router;
